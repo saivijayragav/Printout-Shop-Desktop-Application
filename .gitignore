@@ -1,4 +1,6 @@
+# =========================
 # Miscellaneous
+# =========================
 *.class
 *.log
 *.pyc
@@ -8,23 +10,25 @@
 .buildlog/
 .history
 .svn/
-android/
 installers/
-ios/
 migrate_working_dir/
 
-# IntelliJ related
+# =========================
+# IntelliJ / Android Studio
+# =========================
 *.iml
 *.ipr
 *.iws
 .idea/
 
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
+# =========================
+# VSCode
+# =========================
+.vscode/
 
-# Flutter/Dart/Pub related
+# =========================
+# Flutter / Dart / Pub
+# =========================
 **/doc/api/
 **/ios/Flutter/.last_build_id
 .dart_tool/
@@ -32,29 +36,49 @@ migrate_working_dir/
 .flutter-plugins-dependencies
 .pub-cache/
 .pub/
-/build/
+build/
 
-# Symbolication related
-app.*.symbols
-
-# Obfuscation related
-app.*.map.json
-
-# Android Studio will place build artifacts here
-/android/app/debug
-/android/app/profile
-/android/app/release
-
-
-# Windows build artifacts
+# =========================
+# Flutter / Windows build
+# =========================
 /windows/Flutter/ephemeral/
-/windows/runner/gRelease/
+/windows/runner/Release/
 /windows/runner/Debug/
-/windows/runner/Release/cache/
-/windows/runner/Debug/cache/
 *.pdb
+*.lib
 *.obj
 *.exe
 *.ilk
 *.idb
 *.tlog
+
+# =========================
+# Android build artifacts
+# =========================
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# =========================
+# iOS build artifacts
+# =========================
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Flutter/Flutter.xcconfig
+ios/Flutter/Generated.xcconfig
+ios/Pods/
+ios/Runner.xcworkspace/
+ios/Runner/GeneratedPluginRegistrant.*
+
+# =========================
+# Symbolication / Obfuscation
+# =========================
+app.*.symbols
+app.*.map.json
+
+# =========================
+# Assets / images (if any temporary files)
+# =========================
+# e.g., ignore temporary editor files
+*.tmp
+*.swp
