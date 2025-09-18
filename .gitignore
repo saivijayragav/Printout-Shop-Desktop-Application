@@ -8,6 +8,9 @@
 .buildlog/
 .history
 .svn/
+android/
+installers/
+ios/
 migrate_working_dir/
 
 # IntelliJ related
@@ -41,3 +44,17 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+
+# Windows build artifacts
+/windows/Flutter/ephemeral/
+/windows/runner/gRelease/
+/windows/runner/Debug/
+/windows/runner/Release/cache/
+/windows/runner/Debug/cache/
+*.pdb
+*.obj
+*.exe
+*.ilk
+*.idb
+*.tlog

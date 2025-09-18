@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:googleapis_auth/auth_io.dart';
+import 'package:flutter/services.dart' show rootBundle;
 
 class NotificationService {
   static Future<void> sendOrderReadyNotification({
@@ -10,19 +11,10 @@ class NotificationService {
   }) async {
     try {
       // Load service account JSON
-      final file = File('config/service-account.json'); // Relative path
-      final serviceAccountJson = await file.readAsString();
-      final Map<String, dynamic> serviceAccount = jsonDecode(serviceAccountJson);
-
-      final clientEmail = serviceAccount['client_email'];
-      final privateKey = serviceAccount['private_key'];
+      final serviceAccountJson = await rootBundle.loadString('assets/config/service-account.json');
+      final serviceAccount = jsonDecode(serviceAccountJson);
+      final credentials = ServiceAccountCredentials.fromJson(serviceAccount);
       final projectId = serviceAccount['project_id'];
-
-      final credentials = ServiceAccountCredentials(
-        clientEmail,
-        ClientId('', ''),
-        privateKey,
-      );
 
       final scopes = ['https://www.googleapis.com/auth/firebase.messaging'];
       final client = await clientViaServiceAccount(credentials, scopes);
@@ -32,7 +24,7 @@ class NotificationService {
      final message = {
   'message': {
     'token': token,
-    'data': {
+    'notification': {
       'title': 'Order Ready 🎉',
       'body': 'Your order $orderId has been printed and is ready for pickup!',
     },
