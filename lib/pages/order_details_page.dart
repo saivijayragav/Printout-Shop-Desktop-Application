@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -290,18 +291,11 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                           icon: const Icon(Icons.print, color: Colors.black),
                           label: const Text("Print", style: TextStyle(color: Colors.black)),
                           onPressed: () {
-                            final connected = isPrinterAvailable();
-                            final message = connected
-                                ? "✅ Printer is connected. Starting print..."
-                                : "❌ Printer is not connected.";
-
-                            ScaffoldMessenger.of(context).showSnackBar(
+                              final message = "✅ Printer is connected. Starting print...";
+                              ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(content: Text(message)),
-                            );
-
-                            if (connected) {
+                              );
                               _downloadAndPrintAll(uniqueFiles);
-                            }
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.blue,
