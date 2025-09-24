@@ -12,6 +12,9 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
   final _formKey = GlobalKey<FormState>();
 
   double? printPrice, colorPrice, softPrice, spiralPrice;
+  double? singleSide, doubleSide, fourSide;
+  bool _liveOrdersEnabled = true;
+
   String adminName = "Arcade Shop";
   String adminEmail = "admin@example.com";
   String adminPhone = "+91-XXXXXXXXXX";
@@ -22,6 +25,9 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
     'colorPrice': false,
     'softBindingPrice': false,
     'spiralBindingPrice': false,
+    'singleSide': false,
+    'doubleSide': false,
+    'fourSide': false
   };
 
   final Map<String, String> _labelMap = {
@@ -29,6 +35,9 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
     'colorPrice': 'Color Price',
     'softBindingPrice': 'Soft Binding Price',
     'spiralBindingPrice': 'Spiral Binding Price',
+    'singleSide': 'Single side Price',
+    'doubleSide': 'Double Side Price',
+    'fourSide': 'Four Side price'
   };
 
   @override
@@ -37,20 +46,30 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
     _loadPrices();
   }
 
-  Future<void> _loadPrices() async {
-    final doc = await FirebaseFirestore.instance.collection('settings').doc('pricing').get();
-    final data = doc.data()!;
-    setState(() {
-      printPrice = data['printPrice']?.toDouble();
-      colorPrice = data['colorPrice']?.toDouble();
-      softPrice = data['softBindingPrice']?.toDouble();
-      spiralPrice = data['spiralBindingPrice']?.toDouble();
+  void _loadPrices() async {
+    final snapshot = await FirebaseFirestore.instance.collection('settings').doc('pricing').get();
+    final data = snapshot.data();
 
-      _controllers['printPrice'] = TextEditingController(text: printPrice!.toStringAsFixed(2));
-      _controllers['colorPrice'] = TextEditingController(text: colorPrice!.toStringAsFixed(2));
-      _controllers['softBindingPrice'] = TextEditingController(text: softPrice!.toStringAsFixed(2));
-      _controllers['spiralBindingPrice'] = TextEditingController(text: spiralPrice!.toStringAsFixed(2));
-    });
+    if (data != null) {
+      setState(() {
+        printPrice = (data['printPrice'] ?? 0).toDouble();
+        colorPrice = (data['colorPrice'] ?? 0).toDouble();
+        softPrice = (data['softBindingPrice'] ?? 0).toDouble();
+        spiralPrice = (data['spiralBindingPrice'] ?? 0).toDouble();
+        
+        doubleSide = (data['doubleSide'] ?? 0).toDouble();
+        fourSide = (data['fourSide'] ?? 0).toDouble();
+        _liveOrdersEnabled = (data['liveOrdersEnabled'] ?? true);
+
+        _controllers['printPrice'] = TextEditingController(text: printPrice!.toStringAsFixed(2));
+        _controllers['colorPrice'] = TextEditingController(text: colorPrice!.toStringAsFixed(2));
+        _controllers['softBindingPrice'] = TextEditingController(text: softPrice!.toStringAsFixed(2));
+        _controllers['spiralBindingPrice'] = TextEditingController(text: spiralPrice!.toStringAsFixed(2));
+        // _controllers['singleSide'] = TextEditingController(text: singleSide!.toStringAsFixed(2));
+        _controllers['doubleSide'] = TextEditingController(text: doubleSide!.toStringAsFixed(2));
+        _controllers['fourSide'] = TextEditingController(text: fourSide!.toStringAsFixed(2));
+      });
+    }
   }
 
   Future<void> _confirmPriceChange(String key) async {
@@ -81,6 +100,9 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
           case 'colorPrice': colorPrice = value; break;
           case 'softBindingPrice': softPrice = value; break;
           case 'spiralBindingPrice': spiralPrice = value; break;
+          // case 'singleSide': singleSide = value; break;
+          case 'doubleSide': doubleSide = value; break;
+          case 'fourSide': fourSide = value; break;
         }
         _isEditing[key] = false;
       });
@@ -133,9 +155,14 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
       'colorPrice': colorPrice ?? 0,
       'softBindingPrice': softPrice ?? 0,
       'spiralBindingPrice': spiralPrice ?? 0,
-    });
+      // 'singleSide': singleSide ?? 0,
+      'doubleSide': doubleSide ?? 0,
+      'fourSide': fourSide ?? 0,
+      'liveOrdersEnabled': _liveOrdersEnabled, // Save toggle state
+    }, SetOptions(merge: true));
+
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("All prices saved to Firebase")),
+      const SnackBar(content: Text("All settings saved to Firebase")),
     );
   }
 
@@ -181,7 +208,11 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
                   priceRow('Color Price', 'colorPrice', colorPrice),
                   priceRow('Soft Binding Price', 'softBindingPrice', softPrice),
                   priceRow('Spiral Binding Price', 'spiralBindingPrice', spiralPrice),
+                  // priceRow('Single side Price', 'singleSide', singleSide),
+                  priceRow('Double Side Price', 'doubleSide', doubleSide),
+                  priceRow('Four Side price', 'fourSide', fourSide),
                   const SizedBox(height: 24),
+                 
                   Center(
                     child: ElevatedButton.icon(
                       onPressed: _saveAll,
