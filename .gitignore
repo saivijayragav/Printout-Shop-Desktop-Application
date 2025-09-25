@@ -12,6 +12,7 @@
 .svn/
 installers/
 migrate_working_dir/
+.env
 
 # =========================
 # IntelliJ / Android Studio

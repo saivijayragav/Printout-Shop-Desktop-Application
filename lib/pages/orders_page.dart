@@ -45,11 +45,30 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   void refreshData() async {
-    final snapshot = await FirebaseFirestore.instance.collection('orders').get();
-    setState(() {
-      _cachedOrders = snapshot.docs;
-    });
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('orders')
+          .orderBy('timestamp')
+          .get();
+
+      setState(() {
+        _cachedOrders = snapshot.docs;
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _liveOrdersEnabled = false; // turn off live updates
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                "An error occurred while fetching orders. Live orders disabled."),
+          ),
+        );
+      }
+    }
   }
+
 
   String formatTimestamp(Timestamp? timestamp) {
     if (timestamp == null) return 'No Timestamp';
@@ -78,7 +97,7 @@ class _OrdersPageState extends State<OrdersPage> {
     try {
       final docRef = FirebaseFirestore.instance.collection('orders').doc(order.id);
       final snapshot = await docRef.get();
-      final data = snapshot.data() as Map<String, dynamic>?;
+      final data = snapshot.data();
 
       if (data == null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -261,15 +280,35 @@ class _OrdersPageState extends State<OrdersPage> {
           Expanded(
             child: _liveOrdersEnabled
                 ? StreamBuilder<QuerySnapshot>(
-                    stream: FirebaseFirestore.instance.collection('orders').snapshots(),
+                    stream: FirebaseFirestore.instance.collection('orders').orderBy('timestamp').snapshots(),
                     builder: (context, snapshot) {
+                      if (snapshot.hasError) {
+                      // Turn off live orders
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (mounted) {
+                          setState(() {
+                            _liveOrdersEnabled = false;
+                          });
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                "Firestore limits exceeded. Live orders turned off.",
+                              ),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      });
+
+                      return buildOrderTable(_cachedOrders);
+                        }
                       if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
                       final docs = snapshot.data!.docs;
                       _cachedOrders = docs; // cache latest data
-                      return buildOrderTable(filterAndSortOrders(docs));
+                      return buildOrderTable(docs);
                     },
                   )
-                : buildOrderTable(filterAndSortOrders(_cachedOrders)),
+                : buildOrderTable(_cachedOrders),
           ),
         ],
       ),
