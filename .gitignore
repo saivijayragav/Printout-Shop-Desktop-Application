@@ -1,0 +1,85 @@
+# =========================
+# Miscellaneous
+# =========================
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.buildlog/
+.history
+.svn/
+installers/
+migrate_working_dir/
+.env
+
+# =========================
+# IntelliJ / Android Studio
+# =========================
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# =========================
+# VSCode
+# =========================
+.vscode/
+
+# =========================
+# Flutter / Dart / Pub
+# =========================
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+build/
+
+# =========================
+# Flutter / Windows build
+# =========================
+/windows/Flutter/ephemeral/
+/windows/runner/Release/
+/windows/runner/Debug/
+*.pdb
+*.lib
+*.obj
+*.exe
+*.ilk
+*.idb
+*.tlog
+
+# =========================
+# Android build artifacts
+# =========================
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# =========================
+# iOS build artifacts
+# =========================
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Flutter/Flutter.xcconfig
+ios/Flutter/Generated.xcconfig
+ios/Pods/
+ios/Runner.xcworkspace/
+ios/Runner/GeneratedPluginRegistrant.*
+
+# =========================
+# Symbolication / Obfuscation
+# =========================
+app.*.symbols
+app.*.map.json
+
+# =========================
+# Assets / images (if any temporary files)
+# =========================
+# e.g., ignore temporary editor files
+*.tmp
+*.swp
