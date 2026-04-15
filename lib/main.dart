@@ -9,7 +9,6 @@ void main() async {
     final options = DefaultFirebaseOptions.currentPlatform;
     await Firebase.initializeApp(options: options);
 
-
   runApp(const MyApp());
 }
 
@@ -23,3 +22,4 @@ class MyApp extends StatelessWidget {
     );
   }
 }
+

@@ -1,9 +1,13 @@
+
+import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:http/http.dart' as http;
 import 'orders_page.dart';
 
 class AdminSettingsPage extends StatefulWidget {
   const AdminSettingsPage({super.key});
+
   @override
   State<AdminSettingsPage> createState() => _AdminSettingsPageState();
 }
@@ -11,9 +15,14 @@ class AdminSettingsPage extends StatefulWidget {
 class _AdminSettingsPageState extends State<AdminSettingsPage> {
   final _formKey = GlobalKey<FormState>();
 
+  // 🔁 CHANGE THIS IF NEEDED
+  final String baseUrl = "http://${dotenv.env['API_IP']}";
+
+  final ScrollController _scrollController = ScrollController();
+
+  // UI variables (unchanged names)
   double? printPrice, colorPrice, softPrice, spiralPrice;
-  double? singleSide, doubleSide, fourSide;
-  bool _liveOrdersEnabled = true;
+  double? doubleSide, fourSide;
 
   String adminName = "Arcade Shop";
   String adminEmail = "admin@example.com";
@@ -25,7 +34,6 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
     'colorPrice': false,
     'softBindingPrice': false,
     'spiralBindingPrice': false,
-    'singleSide': false,
     'doubleSide': false,
     'fourSide': false
   };
@@ -35,7 +43,6 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
     'colorPrice': 'Color Price',
     'softBindingPrice': 'Soft Binding Price',
     'spiralBindingPrice': 'Spiral Binding Price',
-    'singleSide': 'Single side Price',
     'doubleSide': 'Double Side Price',
     'fourSide': 'Four Side price'
   };
@@ -43,37 +50,67 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
   @override
   void initState() {
     super.initState();
+
+    _controllers['printPrice'] = TextEditingController();
+    _controllers['colorPrice'] = TextEditingController();
+    _controllers['softBindingPrice'] = TextEditingController();
+    _controllers['spiralBindingPrice'] = TextEditingController();
+    _controllers['doubleSide'] = TextEditingController();
+    _controllers['fourSide'] = TextEditingController();
+
     _loadPrices();
   }
 
-  void _loadPrices() async {
-    final snapshot = await FirebaseFirestore.instance.collection('settings').doc('pricing').get();
-    final data = snapshot.data();
+  // =============================
+  // GET FROM SPRING BOOT
+  // =============================
+  Future<void> _loadPrices() async {
+    try {
+      final response = await http.get(Uri.parse("$baseUrl/api/settings/pricing"));
 
-    if (data != null) {
-      setState(() {
-        printPrice = (data['printPrice'] ?? 0).toDouble();
-        colorPrice = (data['colorPrice'] ?? 0).toDouble();
-        softPrice = (data['softBindingPrice'] ?? 0).toDouble();
-        spiralPrice = (data['spiralBindingPrice'] ?? 0).toDouble();
-        
-        doubleSide = (data['doubleSide'] ?? 0).toDouble();
-        fourSide = (data['fourSide'] ?? 0).toDouble();
-        _liveOrdersEnabled = (data['liveOrdersEnabled'] ?? true);
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
 
-        _controllers['printPrice'] = TextEditingController(text: printPrice!.toStringAsFixed(2));
-        _controllers['colorPrice'] = TextEditingController(text: colorPrice!.toStringAsFixed(2));
-        _controllers['softBindingPrice'] = TextEditingController(text: softPrice!.toStringAsFixed(2));
-        _controllers['spiralBindingPrice'] = TextEditingController(text: spiralPrice!.toStringAsFixed(2));
-        // _controllers['singleSide'] = TextEditingController(text: singleSide!.toStringAsFixed(2));
-        _controllers['doubleSide'] = TextEditingController(text: doubleSide!.toStringAsFixed(2));
-        _controllers['fourSide'] = TextEditingController(text: fourSide!.toStringAsFixed(2));
-      });
+        setState(() {
+          printPrice = (data['rateBw1'] ?? 0).toDouble();
+          doubleSide = (data['rateBw2'] ?? 0).toDouble();
+          fourSide = (data['rateBw4'] ?? 0).toDouble();
+
+          colorPrice = (data['rateColor1'] ?? 0).toDouble();
+          spiralPrice = (data['costSpiral'] ?? 0).toDouble();
+          softPrice = (data['costSoft'] ?? 0).toDouble();
+
+          _controllers['printPrice']!.text = printPrice!.toStringAsFixed(2);
+          _controllers['doubleSide']!.text = doubleSide!.toStringAsFixed(2);
+          _controllers['fourSide']!.text = fourSide!.toStringAsFixed(2);
+          _controllers['colorPrice']!.text = colorPrice!.toStringAsFixed(2);
+          _controllers['spiralBindingPrice']!.text = spiralPrice!.toStringAsFixed(2);
+          _controllers['softBindingPrice']!.text = softPrice!.toStringAsFixed(2);
+        });
+      } else {
+        throw Exception("Server error ${response.statusCode}");
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Failed to load settings: $e")),
+      );
     }
   }
 
+  // =============================
+  // CONFIRM EDIT (LOCAL)
+  // =============================
   Future<void> _confirmPriceChange(String key) async {
-    final value = double.tryParse(_controllers[key]!.text.trim());
+    final controller = _controllers[key];
+
+    if (controller == null || controller.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please enter a value first")),
+      );
+      return;
+    }
+
+    final value = double.tryParse(controller.text.trim());
     if (value == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Invalid price entered")),
@@ -96,16 +133,28 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
     if (confirm == true) {
       setState(() {
         switch (key) {
-          case 'printPrice': printPrice = value; break;
-          case 'colorPrice': colorPrice = value; break;
-          case 'softBindingPrice': softPrice = value; break;
-          case 'spiralBindingPrice': spiralPrice = value; break;
-          // case 'singleSide': singleSide = value; break;
-          case 'doubleSide': doubleSide = value; break;
-          case 'fourSide': fourSide = value; break;
+          case 'printPrice':
+            printPrice = value;
+            break;
+          case 'colorPrice':
+            colorPrice = value;
+            break;
+          case 'softBindingPrice':
+            softPrice = value;
+            break;
+          case 'spiralBindingPrice':
+            spiralPrice = value;
+            break;
+          case 'doubleSide':
+            doubleSide = value;
+            break;
+          case 'fourSide':
+            fourSide = value;
+            break;
         }
         _isEditing[key] = false;
       });
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('${_labelMap[key]} updated locally')),
       );
@@ -138,10 +187,6 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
                   },
                 ),
               ),
-              validator: (v) {
-                if (double.tryParse(v ?? '') == null) return 'Invalid';
-                return null;
-              },
             ),
           ),
         ],
@@ -149,23 +194,45 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
     );
   }
 
+  // =============================
+  // PUT TO SPRING BOOT
+  // =============================
   Future<void> _saveAll() async {
-    await FirebaseFirestore.instance.collection('settings').doc('pricing').set({
-      'printPrice': printPrice ?? 0,
-      'colorPrice': colorPrice ?? 0,
-      'softBindingPrice': softPrice ?? 0,
-      'spiralBindingPrice': spiralPrice ?? 0,
-      // 'singleSide': singleSide ?? 0,
-      'doubleSide': doubleSide ?? 0,
-      'fourSide': fourSide ?? 0,
-      'liveOrdersEnabled': _liveOrdersEnabled, // Save toggle state
-    }, SetOptions(merge: true));
+    final body = {
+      'rateBw1': printPrice ?? 0,
+      'rateBw2': doubleSide ?? 0,
+      'rateBw4': fourSide ?? 0,
+      'rateColor1': colorPrice ?? 0,
+      'rateColor2': 0,
+      'rateColor4': 0,
+      'costSpiral': spiralPrice ?? 0,
+      'costSoft': softPrice ?? 0,
+    };
+   
+    try {
+      final response = await http.put(
+        Uri.parse("$baseUrl/api/settings/savepricing"),
+        headers: {"Content-Type": "application/json"},
+        body: json.encode(body),
+      );
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("All settings saved to Firebase")),
-    );
+      if (response.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(response.body)),
+        );
+      } else {
+        throw Exception("Server error ${response.statusCode}");
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Failed to save settings: $e")),
+      );
+    }
   }
 
+  // =============================
+  // UI (UNCHANGED)
+  // =============================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -193,43 +260,51 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
           ),
           child: Form(
             key: _formKey,
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Admin Profile', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  Text('Name: $adminName', style: const TextStyle(color: Colors.black87)),
-                  Text('Email: $adminEmail', style: const TextStyle(color: Colors.black87)),
-                  Text('Phone: $adminPhone', style: const TextStyle(color: Colors.black87)),
-                  const Divider(height: 32),
-                  const Text('Pricing', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  priceRow('Print Price', 'printPrice', printPrice),
-                  priceRow('Color Price', 'colorPrice', colorPrice),
-                  priceRow('Soft Binding Price', 'softBindingPrice', softPrice),
-                  priceRow('Spiral Binding Price', 'spiralBindingPrice', spiralPrice),
-                  // priceRow('Single side Price', 'singleSide', singleSide),
-                  priceRow('Double Side Price', 'doubleSide', doubleSide),
-                  priceRow('Four Side price', 'fourSide', fourSide),
-                  const SizedBox(height: 24),
-                 
-                  Center(
-                    child: ElevatedButton.icon(
-                      onPressed: _saveAll,
-                      icon: const Icon(Icons.save),
-                      label: const Text('Save Settings'),
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                        textStyle: const TextStyle(fontSize: 16),
+            child: Scrollbar(
+              controller: _scrollController,
+              thumbVisibility: true,
+              child: SingleChildScrollView(
+                controller: _scrollController,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Admin Profile', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Text('Name: $adminName'),
+                    Text('Email: $adminEmail'),
+                    Text('Phone: $adminPhone'),
+                    const Divider(height: 32),
+                    const Text('Pricing', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    priceRow('Print Price', 'printPrice', printPrice),
+                    priceRow('Color Price', 'colorPrice', colorPrice),
+                    priceRow('Soft Binding Price', 'softBindingPrice', softPrice),
+                    priceRow('Spiral Binding Price', 'spiralBindingPrice', spiralPrice),
+                    priceRow('Double Side Price', 'doubleSide', doubleSide),
+                    priceRow('Four Side price', 'fourSide', fourSide),
+                    const SizedBox(height: 24),
+                    Center(
+                      child: ElevatedButton.icon(
+                        onPressed: _saveAll,
+                        icon: const Icon(Icons.save),
+                        label: const Text('Save Settings'),
                       ),
-                    ),
-                  )
-                ],
+                    )
+                  ],
+                ),
               ),
             ),
           ),
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    for (var c in _controllers.values) {
+      c.dispose();
+    }
+    super.dispose();
   }
 }

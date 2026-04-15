@@ -1,8 +1,7 @@
 import 'dart:convert';
-import 'dart:io';
-import 'package:http/http.dart' as http;
-import 'package:googleapis_auth/auth_io.dart';
 import 'package:flutter/services.dart' show rootBundle;
+import 'package:googleapis_auth/auth_io.dart';
+import 'package:http/http.dart' as http;
 
 class NotificationService {
   static Future<void> sendOrderReadyNotification({
@@ -10,51 +9,68 @@ class NotificationService {
     required String orderId,
   }) async {
     try {
-      // Load service account JSON
-      final serviceAccountJson = await rootBundle.loadString('assets/config/service-account.json');
-      final serviceAccount = jsonDecode(serviceAccountJson);
-      final credentials = ServiceAccountCredentials.fromJson(serviceAccount);
-      final projectId = serviceAccount['project_id'];
+      // Load service account json
+      final serviceAccountString =
+          await rootBundle.loadString('assets/config/service-account.json');
 
-      final scopes = ['https://www.googleapis.com/auth/firebase.messaging'];
-      final client = await clientViaServiceAccount(credentials, scopes);
+      final Map<String, dynamic> serviceAccount =
+          jsonDecode(serviceAccountString);
 
-      final url = Uri.parse('https://fcm.googleapis.com/v1/projects/$projectId/messages:send');
+      final String projectId = serviceAccount['project_id'];
 
-     final message = {
-  'message': {
-    'token': token,
-    'notification': {
-      'title': 'Order Ready 🎉',
-      'body': 'Your order $orderId has been printed and is ready for pickup!',
-    },
-    'android': {
-      'priority': 'high',
-      'notification': {
-        'sound': 'default',
-        'click_action': 'FLUTTER_NOTIFICATION_CLICK',
-        'channel_id': 'channel_id'
-      },
-    },
-  },
-};
+      final credentials =
+          ServiceAccountCredentials.fromJson(serviceAccount);
 
+      final scopes = [
+        'https://www.googleapis.com/auth/firebase.messaging'
+      ];
 
-      final response = await client.post(
+      final authClient =
+          await clientViaServiceAccount(credentials, scopes);
+
+      final Uri url = Uri.parse(
+        'https://fcm.googleapis.com/v1/projects/$projectId/messages:send',
+      );
+
+      final Map<String, dynamic> body = {
+        "message": {
+          "token": token,
+          "notification": {
+            "title": "Order Printed! ✅",
+            "body":
+                "Your order #$orderId is printed and ready for pickup."
+          },
+          "data": {
+            "orderId": orderId,
+            "type": "order_ready",
+            "click_action": "FLUTTER_NOTIFICATION_CLICK"
+          },
+          "android": {
+            "priority": "HIGH",
+            "notification": {
+              "channel_id": "high_importance_channel",
+              "sound": "default"
+            }
+          }
+        }
+      };
+
+      final response = await authClient.post(
         url,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(message),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode(body),
       );
 
       if (response.statusCode == 200) {
-        print('✅ Notification sent successfully.');
+        print("✅ FCM Sent Successfully");
       } else {
-        print('❌ Failed to send notification: ${response.statusCode} - ${response.body}');
+        print("❌ FCM Failed: ${response.statusCode}");
+        print(response.body);
       }
 
-      client.close();
+      authClient.close();
     } catch (e) {
-      print('🔥 Error sending FCM notification: $e');
+      print("🔥 Notification Error: $e");
     }
   }
 }

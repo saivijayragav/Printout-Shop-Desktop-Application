@@ -1,11 +1,17 @@
-// Add this import at the top if not present
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:firebase_core/firebase_core.dart';
+
+
+// Custom Imports
 import '../widgets/customappbar.dart';
 import '../widgets/custom_drawer.dart';
-import '../Service/notification_service.dart';
 import 'order_details_page.dart';
+import '../Service/notification_service.dart'; // Make sure this path is correct!
 
 class OrdersPage extends StatefulWidget {
   const OrdersPage({super.key});
@@ -16,72 +22,136 @@ class OrdersPage extends StatefulWidget {
 
 class _OrdersPageState extends State<OrdersPage> {
   bool _liveOrdersEnabled = true;
-  List<DocumentSnapshot> _cachedOrders = [];
+  List<dynamic> _cachedOrders = [];
+  bool _isLoading = false;
+
+  // final String baseUrl = "http://172.15.18.61:8080/api/orders/summary";
+  final String baseUrl =
+    "http://${dotenv.env['API_IP']}/api/orders/summary";
+
 
   @override
   void initState() {
     super.initState();
-    fetchLiveOrderToggle();
+    fetchOrdersFromApi();
   }
 
-  void fetchLiveOrderToggle() async {
-    final doc = await FirebaseFirestore.instance.collection('settings').doc('config').get();
-    if (doc.exists) {
-      final data = doc.data();
-      if (data != null && data['liveOrdersEnabled'] != null) {
-        setState(() {
-          _liveOrdersEnabled = data['liveOrdersEnabled'] as bool;
-        });
-      }
-    }
-  }
-
-  void toggleLiveOrder(bool value) async {
+  void toggleLiveOrder(bool value) {
     setState(() => _liveOrdersEnabled = value);
-    await FirebaseFirestore.instance
-        .collection('settings')
-        .doc('config')
-        .set({'liveOrdersEnabled': value}, SetOptions(merge: true));
+    if (value) refreshData();
   }
 
-  void refreshData() async {
+  Future<void> fetchOrdersFromApi() async {
+    setState(() => _isLoading = true);
     try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('orders')
-          .orderBy('timestamp')
-          .get();
+      final response = await http.get(Uri.parse(baseUrl));
 
-      setState(() {
-        _cachedOrders = snapshot.docs;
-      });
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _liveOrdersEnabled = false; // turn off live updates
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(response.body);
+        
+        // Sort: Oldest first (Ascending)
+        data.sort((a, b) {
+           String tA = a['timestamp'] ?? '';
+           String tB = b['timestamp'] ?? '';
+           return tA.compareTo(tB); 
         });
+
+        setState(() {
+          _cachedOrders = data;
+          _isLoading = false;
+        });
+      } else {
+        throw Exception('Failed to load orders: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint("Error fetching API: $e");
+      if (mounted) {
+        setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-                "An error occurred while fetching orders. Live orders disabled."),
+            content: Text("API Connection Error: $e"),
+            backgroundColor: Colors.red,
           ),
         );
       }
     }
   }
 
-
-  String formatTimestamp(Timestamp? timestamp) {
-    if (timestamp == null) return 'No Timestamp';
-    final dt = timestamp.toDate();
-    return DateFormat('dd MMM yyyy, hh:mm a').format(dt);
+  void refreshData() {
+    fetchOrdersFromApi();
   }
 
-  void markAsPrinted(DocumentSnapshot order) async {
+  String formatTimestamp(String? timestampStr) {
+    if (timestampStr == null || timestampStr.isEmpty) return 'No Timestamp';
+    try {
+      final DateTime dt = DateTime.parse(timestampStr);
+      final DateTime now = DateTime.now();
+      final bool isToday = dt.year == now.year && dt.month == now.month && dt.day == now.day;
+      final DateTime yesterday = now.subtract(const Duration(days: 1));
+      final bool isYesterday = dt.year == yesterday.year && dt.month == yesterday.month && dt.day == yesterday.day;
+
+      final String timePart = DateFormat('hh:mm a').format(dt);
+
+      if (isToday) return "Today, $timePart";
+      if (isYesterday) return "Yesterday, $timePart";
+      return DateFormat('dd MMM yyyy, hh:mm a').format(dt);
+    } catch (e) {
+      return timestampStr; 
+    }
+  }
+
+  // 🔥 UPDATED: Helper to get Token & Call your External Service
+ Future<void> triggerNotificationSequence(
+    String rawPhoneNumber, String orderId) async {
+  try {
+    // 🔹 Clean phone number
+    String cleanPhone =
+        rawPhoneNumber.replaceAll(RegExp(r'[^0-9]'), '');
+
+    if (cleanPhone.length > 10) {
+      cleanPhone = cleanPhone.substring(cleanPhone.length - 10);
+    }
+
+    print("🔍 Looking up Firestore user: $cleanPhone");
+
+    final docSnapshot = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(cleanPhone)
+        .get();
+
+    if (!docSnapshot.exists) {
+      print("⚠️ User document NOT found");
+      return;
+    }
+
+    final data = docSnapshot.data();
+    final String? token = data?['fcmToken'];
+
+    if (token == null || token.isEmpty) {
+      print("⚠️ FCM token missing or empty");
+      return;
+    }
+
+    print("📲 FCM Token found: ${token.substring(0, 20)}...");
+
+    await NotificationService.sendOrderReadyNotification(
+      token: token,
+      orderId: orderId,
+    );
+
+    print("✅ Notification SENT to mobile app");
+  } catch (e) {
+    print("❌ Notification error: $e");
+  }
+}
+
+
+  void markAsPrinted(Map<String, dynamic> order) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text("Mark as Printed"),
-        content: const Text("Are you sure you want to mark this order as printed?"),
+        content: const Text("Send notification to user and mark locally?"),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Cancel")),
           TextButton(
@@ -92,67 +162,31 @@ class _OrdersPageState extends State<OrdersPage> {
       ),
     );
 
-    if (confirm != true) return;
+    if (confirm == true) {
+      try {
+        String? phone = order['phoneNumber'];
+        String orderId = order['orderId']?.toString() ?? 'N/A';
 
-    try {
-      final docRef = FirebaseFirestore.instance.collection('orders').doc(order.id);
-      final snapshot = await docRef.get();
-      final data = snapshot.data();
-
-      if (data == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Order data not found.")),
-        );
-        return;
-      }
-
-      final orderId = data['orderID'] ?? 'Unknown';
-      final userId = data['userId'];
-
-      await docRef.update({'printed': true});
-
-      String? fcmToken;
-      if (userId != null && userId.toString().isNotEmpty) {
-        final userDoc = await FirebaseFirestore.instance.collection('users').doc(userId.toString()).get();
-        if (userDoc.exists) {
-          fcmToken = userDoc.data()?['fcmToken'];
+        // Send Notification if phone exists
+        if (phone != null && phone.isNotEmpty) {
+          await triggerNotificationSequence(phone, orderId);
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text("✅ Order marked & Notification sent to $phone")),
+            );
+          }
         }
+        refreshData();
+        print("📦 Mark as Printed clicked → OrderId: $orderId | Phone: $phone");
+
+      } catch (e) {
+        debugPrint("❌ markAsPrinted error: $e");
       }
-
-      if (fcmToken != null && fcmToken.isNotEmpty) {
-        try {
-          await NotificationService.sendOrderReadyNotification(token: fcmToken, orderId: orderId);
-        } catch (_) {}
-      }
-
-      final updatedData = Map<String, dynamic>.from(data);
-      if (updatedData.containsKey('timestamp')) {
-        updatedData['originalTimestamp'] = updatedData['timestamp'];
-      }
-
-      updatedData['timestamp'] = FieldValue.serverTimestamp();
-      updatedData['printed'] = true;
-
-      await FirebaseFirestore.instance.collection('order_history').add(updatedData);
-      await docRef.delete();
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Order $orderId marked as printed and moved.")),
-      );
-
-      refreshData();
-    } catch (e, stack) {
-      debugPrint("❌ markAsPrinted error: $e");
-      debugPrint("📄 Stack trace: $stack");
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: ${e.toString()}")),
-      );
     }
   }
 
-  void deleteOrder(DocumentSnapshot order) async {
+  void deleteOrder(Map<String, dynamic> order) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -170,51 +204,26 @@ class _OrdersPageState extends State<OrdersPage> {
 
     if (confirm == true) {
       try {
-        final data = order.data() as Map<String, dynamic>;
-        final orderId = data['orderID'] ?? 'Unknown';
+        final orderId = order['orderId'];
+        final response = await http.delete(Uri.parse("$baseUrl/$orderId"));
 
-        await FirebaseFirestore.instance.collection('orders').doc(order.id).delete();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.delete, color: Colors.white),
-                const SizedBox(width: 12),
-                Text("Order deleted $orderId"),
-              ],
-            ),
-            backgroundColor: Colors.red.shade400,
-          ),
-        );
-
-        refreshData();
+        if (response.statusCode == 200 || response.statusCode == 204) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text("Order deleted $orderId"),
+                backgroundColor: Colors.red.shade400,
+              ),
+            );
+          }
+          refreshData();
+        }
       } catch (e) {
-        debugPrint("Error deleting order: $e");
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Delete Failed: $e")));
+        }
       }
     }
-  }
-
-  List<DocumentSnapshot> filterAndSortOrders(List<DocumentSnapshot> allDocs) {
-    final uniqueMap = <String, DocumentSnapshot>{};
-
-    for (var doc in allDocs) {
-      final data = doc.data() as Map<String, dynamic>;
-      final orderId = data['orderID'];
-      if (orderId != null && !uniqueMap.containsKey(orderId)) {
-        uniqueMap[orderId] = doc;
-      }
-    }
-
-    final uniqueDocs = uniqueMap.values.toList();
-    uniqueDocs.sort((a, b) {
-      final t1 = (a.data() as Map<String, dynamic>)['timestamp'];
-      final t2 = (b.data() as Map<String, dynamic>)['timestamp'];
-      final d1 = t1 is Timestamp ? t1.toDate() : DateTime(2100);
-      final d2 = t2 is Timestamp ? t2.toDate() : DateTime(2100);
-      return d1.compareTo(d2);
-    });
-
-    return uniqueDocs;
   }
 
   @override
@@ -257,6 +266,7 @@ class _OrdersPageState extends State<OrdersPage> {
               ],
             ),
           ),
+          // Live Orders Toggle
           Padding(
             padding: const EdgeInsets.only(right: 24, bottom: 10),
             child: Row(
@@ -278,36 +288,8 @@ class _OrdersPageState extends State<OrdersPage> {
             ),
           ),
           Expanded(
-            child: _liveOrdersEnabled
-                ? StreamBuilder<QuerySnapshot>(
-                    stream: FirebaseFirestore.instance.collection('orders').orderBy('timestamp').snapshots(),
-                    builder: (context, snapshot) {
-                      if (snapshot.hasError) {
-                      // Turn off live orders
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        if (mounted) {
-                          setState(() {
-                            _liveOrdersEnabled = false;
-                          });
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                "Firestore limits exceeded. Live orders turned off.",
-                              ),
-                              backgroundColor: Colors.red,
-                            ),
-                          );
-                        }
-                      });
-
-                      return buildOrderTable(_cachedOrders);
-                        }
-                      if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-                      final docs = snapshot.data!.docs;
-                      _cachedOrders = docs; // cache latest data
-                      return buildOrderTable(docs);
-                    },
-                  )
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
                 : buildOrderTable(_cachedOrders),
           ),
         ],
@@ -315,10 +297,14 @@ class _OrdersPageState extends State<OrdersPage> {
     );
   }
 
-  Widget buildOrderTable(List<DocumentSnapshot> docs) {
+  Widget buildOrderTable(List<dynamic> orders) {
+    if (orders.isEmpty) {
+      return const Center(child: Text("No orders found."));
+    }
+
     return Center(
       child: Container(
-        constraints: const BoxConstraints(maxWidth: 1000),
+        constraints: const BoxConstraints(maxWidth: 1200),
         padding: const EdgeInsets.all(12),
         margin: const EdgeInsets.only(bottom: 20),
         decoration: BoxDecoration(
@@ -334,20 +320,24 @@ class _OrdersPageState extends State<OrdersPage> {
             child: DataTable(
               headingRowColor: MaterialStateColor.resolveWith((_) => Colors.blue.shade50),
               border: TableBorder.all(color: Colors.black54),
-              columnSpacing: 30,
+              columnSpacing: 20,
               headingTextStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
               columns: const [
                 DataColumn(label: Text('Index')),
                 DataColumn(label: Text('Order ID')),
+                DataColumn(label: Text('Name')),
+                DataColumn(label: Text('Phone')),
                 DataColumn(label: Text('Mark as Printed')),
                 DataColumn(label: Text('Date/Time')),
                 DataColumn(label: Text('Delete')),
               ],
-              rows: List.generate(docs.length, (index) {
-                final doc = docs[index];
-                final data = doc.data() as Map<String, dynamic>;
-                final orderId = data['orderID'] ?? 'N/A';
-                final timestamp = data['timestamp'];
+              rows: List.generate(orders.length, (index) {
+                final order = orders[index];
+
+                final orderId = order['orderId'] ?? 'N/A';
+                final userName = order['userName'] ?? '-';
+                final phoneNumber = order['phoneNumber'] ?? '-';
+                final timestamp = order['timestamp']; 
 
                 return DataRow(cells: [
                   DataCell(Text('${index + 1}')),
@@ -358,11 +348,11 @@ class _OrdersPageState extends State<OrdersPage> {
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => OrderDetailPage(orderData: data),
+                            builder: (_) => OrderDetailPage(orderData: order),
                           ),
                         ),
                         child: Text(
-                          orderId,
+                          orderId.toString(),
                           style: const TextStyle(
                             color: Colors.blue,
                             fontWeight: FontWeight.bold,
@@ -372,9 +362,11 @@ class _OrdersPageState extends State<OrdersPage> {
                       ),
                     ),
                   ),
+                  DataCell(Text(userName)),
+                  DataCell(Text(phoneNumber)),
                   DataCell(
                     ElevatedButton(
-                      onPressed: () => markAsPrinted(doc),
+                      onPressed: () => markAsPrinted(order),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.green,
                         shape: RoundedRectangleBorder(
@@ -389,12 +381,12 @@ class _OrdersPageState extends State<OrdersPage> {
                   ),
                   DataCell(Text(
                     formatTimestamp(timestamp),
-                    style: const TextStyle(fontSize: 14),
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                   )),
                   DataCell(
                     IconButton(
                       icon: const Icon(Icons.delete, color: Colors.red),
-                      onPressed: () => deleteOrder(doc),
+                      onPressed: () => deleteOrder(order),
                     ),
                   ),
                 ]);
@@ -406,3 +398,4 @@ class _OrdersPageState extends State<OrdersPage> {
     );
   }
 }
+// only fix the notification problem mainly dont change the ui content ,functions 

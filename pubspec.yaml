@@ -31,6 +31,7 @@ dependencies:
   pointycastle: ^4.0.0
   asn1lib: ^1.6.5
   basic_utils: ^5.8.2
+  shared_preferences: ^2.2.2 
  
   
 
@@ -47,3 +48,4 @@ flutter:
     - assets/config/
     - assets/Xeroxshoplogo.ico
     - .env
+    - assets/config/service-account.json
